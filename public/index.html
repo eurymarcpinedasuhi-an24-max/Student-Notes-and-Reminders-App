@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Note and Reminders</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div>
+        <h1>Note and Reminders</h1>
+
+        <!-- Add note taking part -->
+        <div id="note-input-section">
+            <div class="input-row">
+                <textarea id="note-content" placeholder="Enter your note here..."></textarea>
+                <div class="input-fields">
+                    <input type="text" id="note-title" placeholder="Add Note Title">
+                    <input type="datetime-local" id="note-datetime">
+                    <button id="add-note-button">Save Note</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <!-- Display Notes with Nearest Reminder-->
+        <div id="reminders">
+            <h2>Reminders</h2>
+            <div id="reminders-container"></div>
+        </div>
+
+        <!-- Display Notes in Card Form-->
+        <div id="notes-display">
+            <h2>All Notes</h2>
+            <div id="notes-container"></div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+
+    <!-- Modal for note details -->
+    <div id="note-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+</body>
+
+</html>
