@@ -29,6 +29,18 @@
                 <label for="note-datetime">Add Reminder</label>
                 <input type="datetime-local" id="note-datetime">
             </div>
+            <div class="input-group">
+                <label for="note-category">Category</label>
+                <select id="note-category">
+                    <option value="General">General</option>
+                    <option value="School">School</option>
+                    <option value="Personal">Personal</option>
+                    <option value="Work">Work</option>
+                <option value="Other">Other</option>
+                </select>
+            </div>
+            
+
             <div class="button-group">
                 <button id="reset-button">Reset Input</button>
                 <button id="add-note-button">Save Note</button>
@@ -49,6 +61,7 @@
             </div>
         </div>
         <script src="script.js"></script>
+        <script src="form-handling.js"></script>
 
         <!-- Modal for note details -->
         <div id="note-modal" class="modal">

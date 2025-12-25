@@ -318,7 +318,6 @@ button[id^="delete-"]:hover {
     gap: 10px;
 }
 
-/* Responsive adjustments */
 @media (max-width: 768px) {
     main {
         flex-direction: column;
@@ -332,3 +331,64 @@ button[id^="delete-"]:hover {
         grid-template-columns: 1fr;
     }
 }
+
+.category-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    margin-left: 5px;
+    background-color: #e0e0e0;
+    color: #333;
+}
+
+
+.category-school {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.category-personal {
+    background-color: #2196F3;
+    color: white;
+}
+
+.category-work {
+    background-color: #FF9800;
+    color: white;
+}
+
+.category-general {
+    background-color: #9E9E9E;
+    color: white;
+}
+
+.filter-buttons {
+    margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.filter-buttons button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 14px;
+    background-color: #f0f0f0;
+}
+
+.filter-buttons button.active {
+    background-color: #4CAF50;
+    color: white;
+}
+
+#note-category {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+

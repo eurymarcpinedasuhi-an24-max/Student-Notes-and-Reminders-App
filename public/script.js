@@ -1,5 +1,8 @@
 let notes = [];
 let reminders = [];
+let currentCategoryFilter = 'All';
+let formHandler = null;
+let eventListenersAttached = false;
 
 const API_BASE = 'http://localhost:3000';
 
@@ -12,11 +15,15 @@ async function loadData() {
         reminders = data.reminders || [];
         displayNotes();
         displayReminders();
+        initializeCategoryFilters();
+        checkReminders();
     } catch (error) {
         console.error('Error loading data from server:', error);
-        // Fallback to localStorage if server is not available
         loadFromLocalStorage();
     }
+    
+    // Add category input if missing
+    addCategoryInput();
 }
 
 // Fallback function to load from localStorage
@@ -33,6 +40,7 @@ function loadFromLocalStorage() {
 
     displayNotes();
     displayReminders();
+    initializeCategoryFilters();
 }
 
 // Save data to server and update local arrays
@@ -54,6 +62,9 @@ async function saveToServerAndUpdateLocal(note) {
             notes.push(savedNote);
         }
 
+        // Update localStorage as backup
+        saveToLocalStorage();
+        
         return savedNote;
     } catch (error) {
         console.error('Error saving to server:', error);
@@ -82,6 +93,9 @@ async function updateOnServerAndLocal(id, updates) {
 
         // Update local arrays
         updateLocalArrays(updatedNote);
+        
+        // Update localStorage
+        updateLocalStorage();
 
         return updatedNote;
     } catch (error) {
@@ -102,6 +116,9 @@ async function deleteFromServerAndLocal(id) {
         // Update local arrays
         notes = notes.filter(note => note.id !== id);
         reminders = reminders.filter(reminder => reminder.id !== id);
+        
+        // Update localStorage
+        deleteFromLocalStorage(id);
 
     } catch (error) {
         console.error('Error deleting from server:', error);
@@ -149,45 +166,229 @@ async function getNextId() {
     } catch (error) {
         // Fallback to localStorage counter
         let idCounter = parseInt(localStorage.getItem('idCounter')) || 0;
-        return ++idCounter;
+        idCounter++;
+        localStorage.setItem('idCounter', idCounter.toString());
+        return idCounter;
     }
 }
 
 // Initialize app
-loadData();
-
-// Check reminders every minute
-setInterval(checkReminders, 60000);
-checkReminders(); // Check immediately on load
-
-document.getElementById("add-note-button").addEventListener("click", async () => {
-    const noteContent = document.getElementById("note-content").value;
-    const noteTitle = document.getElementById("note-title").value;
-    const noteDatetime = document.getElementById("note-datetime").value;
-
-    // Generate title if empty
-    let title = noteTitle;
-    if (!title) {
-        const untitledCount = [...notes, ...reminders].filter(note => note.title && note.title.startsWith("Untitled")).length;
-        title = `Untitled${untitledCount + 1}`;
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM Content Loaded - Initializing app');
+    
+    // Initialize form handler if available
+    if (typeof window.FormHandler !== 'undefined') {
+        formHandler = new window.FormHandler();
     }
+    
+    // Load data and setup
+    loadData();
+    
+    // Setup event listeners
+    setupEventListeners();
+    
+    // Check reminders every minute
+    setInterval(checkReminders, 60000);
+    
+    // Request notification permission
+    requestNotificationPermission();
+});
 
-    const id = await getNextId();
+// Setup event listeners (only once)
+function setupEventListeners() {
+    if (eventListenersAttached) return;
+    
+    console.log('Setting up event listeners');
+    
+    // Add note button
+    const addButton = document.getElementById("add-note-button");
+    if (addButton) {
+        // Remove any existing listeners by cloning
+        const newAddButton = addButton.cloneNode(true);
+        addButton.parentNode.replaceChild(newAddButton, addButton);
+        
+        newAddButton.addEventListener("click", handleAddNote);
+    }
+    
+    // Reset button
+    const resetButton = document.getElementById("reset-button");
+    if (resetButton) {
+        const newResetButton = resetButton.cloneNode(true);
+        resetButton.parentNode.replaceChild(newResetButton, resetButton);
+        
+        newResetButton.addEventListener("click", handleResetForm);
+    }
+    
+    eventListenersAttached = true;
+}
 
-    const note = {
-        id: id,
-        title: title,
-        content: noteContent,
-        timestamp: new Date().toLocaleString(),
-        lastEditTime: new Date().toLocaleString(),
-        reminder: noteDatetime || null,
-        alertedDay: false,
-        alertedTime: false,
-        done: false,
-        missed: false
-    };
+// Handle add note
+async function handleAddNote(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    console.log('Add note button clicked');
+    
+    // Use form handler if available, otherwise use direct method
+    if (formHandler && formHandler.submitNoteForm) {
+        await formHandler.submitNoteForm();
+    } else {
+        await addNote();
+    }
+}
 
+// Handle reset form
+function handleResetForm(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    console.log('Reset button clicked');
+    
+    // Use form handler if available, otherwise use direct method
+    if (formHandler && formHandler.resetForm) {
+        formHandler.resetForm('note');
+    } else {
+        resetNoteForm();
+    }
+}
+
+// Function to add category input if missing
+function addCategoryInput() {
+    const noteInputSection = document.getElementById('note-input-section');
+    const datetimeGroup = document.querySelector('.input-group:has(#note-datetime)');
+    
+    if (datetimeGroup && !document.getElementById('note-category')) {
+        const categoryHtml = `
+            <div class="input-group">
+                <label for="note-category">Category</label>
+                <select id="note-category">
+                    <option value="General">General</option>
+                    <option value="School">School</option>
+                    <option value="Personal">Personal</option>
+                    <option value="Work">Work</option>
+                    <option value="Other">Other</option>
+                </select>
+            </div>
+        `;
+        
+        datetimeGroup.insertAdjacentHTML('afterend', categoryHtml);
+        
+        // Re-setup event listeners since DOM changed
+        eventListenersAttached = false;
+        setupEventListeners();
+    }
+}
+
+// Initialize category filter buttons
+function initializeCategoryFilters() {
+    const categories = ['All', 'General', 'School', 'Personal', 'Work', 'Other'];
+    const notesContainer = document.getElementById('notes-display');
+    const remindersContainer = document.getElementById('reminders');
+    
+    // Remove existing filter buttons
+    document.querySelectorAll('.filter-buttons').forEach(el => el.remove());
+    
+    // Add filter buttons to notes section
+    const notesFilterDiv = document.createElement('div');
+    notesFilterDiv.className = 'filter-buttons';
+    notesFilterDiv.innerHTML = categories.map(cat => 
+        `<button class="category-filter ${cat === 'All' ? 'active' : ''}" data-category="${cat}">${cat}</button>`
+    ).join('');
+    
+    // Add filter buttons to reminders section
+    const remindersFilterDiv = document.createElement('div');
+    remindersFilterDiv.className = 'filter-buttons';
+    remindersFilterDiv.innerHTML = categories.map(cat => 
+        `<button class="category-filter ${cat === 'All' ? 'active' : ''}" data-category="${cat}">${cat}</button>`
+    ).join('');
+    
+    // Insert before containers
+    const notesTitle = notesContainer.querySelector('h2');
+    const remindersTitle = remindersContainer.querySelector('h2');
+    
+    if (notesTitle && notesContainer.querySelector('#notes-container')) {
+        notesTitle.insertAdjacentElement('afterend', notesFilterDiv);
+    }
+    
+    if (remindersTitle && remindersContainer.querySelector('#reminders-container')) {
+        remindersTitle.insertAdjacentElement('afterend', remindersFilterDiv);
+    }
+    
+    // Add event listeners to all filter buttons
+    document.querySelectorAll('.category-filter').forEach(button => {
+        button.addEventListener('click', () => {
+            // Update active state
+            document.querySelectorAll('.category-filter').forEach(btn => 
+                btn.classList.remove('active')
+            );
+            button.classList.add('active');
+            
+            // Update filter
+            currentCategoryFilter = button.getAttribute('data-category');
+            displayNotes();
+            displayReminders();
+        });
+    });
+}
+
+// Main function to add a note
+async function addNote() {
+    console.log('addNote function called');
+    
+    const addButton = document.getElementById("add-note-button");
+    
+    // Disable button to prevent double clicks
+    if (addButton.disabled) {
+        console.log('Button already disabled, ignoring click');
+        return;
+    }
+    
+    addButton.disabled = true;
+    const originalText = addButton.textContent;
+    addButton.textContent = 'Saving...';
+    
     try {
+        // Get form values directly
+        const noteContent = document.getElementById("note-content").value;
+        const noteTitle = document.getElementById("note-title").value;
+        const noteDatetime = document.getElementById("note-datetime").value;
+        const noteCategory = document.getElementById("note-category")?.value || 'General';
+        
+        console.log('Form values:', { noteTitle, noteCategory });
+
+        // Validate required fields
+        if (!noteContent.trim()) {
+            alert('Note content is required');
+            return;
+        }
+
+        // Generate title if empty
+        let title = noteTitle;
+        if (!title) {
+            const untitledCount = [...notes, ...reminders].filter(note => 
+                note.title && note.title.startsWith("Untitled")
+            ).length;
+            title = `Untitled${untitledCount + 1}`;
+        }
+
+        const id = await getNextId();
+
+        const note = {
+            id: id,
+            title: title,
+            content: noteContent,
+            timestamp: new Date().toLocaleString(),
+            lastEditTime: new Date().toLocaleString(),
+            reminder: noteDatetime || null,
+            alertedDay: false,
+            alertedTime: false,
+            done: false,
+            missed: false,
+            category: noteCategory
+        };
+
+        console.log('Saving note:', note);
+
         // Save to server and update local arrays
         await saveToServerAndUpdateLocal(note);
 
@@ -196,38 +397,60 @@ document.getElementById("add-note-button").addEventListener("click", async () =>
         displayReminders();
 
         // Clear fields
-        document.getElementById("note-content").value = "";
-        document.getElementById("note-title").value = "";
-        document.getElementById("note-datetime").value = "";
+        resetNoteForm();
 
+        // Check reminders
         checkReminders();
+        
+        console.log('Note saved successfully');
+        
     } catch (error) {
         console.error('Error saving note:', error);
+        alert('Failed to save note. Please try again.');
+    } finally {
+        // Re-enable button
+        addButton.disabled = false;
+        addButton.textContent = originalText;
     }
-});
+}
 
-document.getElementById("reset-button").addEventListener("click", () => {
+function resetNoteForm() {
     document.getElementById("note-content").value = "";
     document.getElementById("note-title").value = "";
     document.getElementById("note-datetime").value = "";
-});
+    const categorySelect = document.getElementById("note-category");
+    if (categorySelect) {
+        categorySelect.value = "General";
+    }
+}
 
 function displayNotes() {
     const notesContainer = document.getElementById("notes-container");
+    if (!notesContainer) return;
+    
     notesContainer.innerHTML = "";
 
-    if (notes.length === 0) {
-        notesContainer.innerHTML = "<p>No notes available.</p>";
+    // Filter notes by category
+    let filteredNotes = notes;
+    if (currentCategoryFilter !== 'All') {
+        filteredNotes = notes.filter(note => note.category === currentCategoryFilter);
+    }
+
+    if (filteredNotes.length === 0) {
+        notesContainer.innerHTML = `<p>No ${currentCategoryFilter === 'All' ? '' : currentCategoryFilter + ' '}notes available.</p>`;
         return;
     }
 
-    notes.forEach((note, index) => {
+    filteredNotes.forEach((note) => {
         const noteElement = document.createElement("div");
         noteElement.className = "note compact";
         noteElement.innerHTML = `
             <div class="note-summary" data-id="${note.id}">
-                <div class="title-line">${note.title}</div>
-                <p>${note.content}</p>
+                <div class="title-line">
+                    ${note.title}
+                    ${note.category ? `<span class="category-badge category-${note.category.toLowerCase()}">${note.category}</span>` : ''}
+                </div>
+                <p>${note.content.length > 100 ? note.content.substring(0, 100) + '...' : note.content}</p>
             </div>
         `;
         notesContainer.appendChild(noteElement);
@@ -240,21 +463,27 @@ function displayNotes() {
             showNoteDetails(index, 'note');
         });
     });
-
-
 }
 
 function displayReminders() {
     const remindersContainer = document.getElementById("reminders-container");
+    if (!remindersContainer) return;
+    
     remindersContainer.innerHTML = "";
 
-    if (reminders.length === 0) {
-        remindersContainer.innerHTML = "<p>No reminders set.</p>";
+    // Filter reminders by category
+    let filteredReminders = reminders;
+    if (currentCategoryFilter !== 'All') {
+        filteredReminders = reminders.filter(reminder => reminder.category === currentCategoryFilter);
+    }
+
+    if (filteredReminders.length === 0) {
+        remindersContainer.innerHTML = `<p>No ${currentCategoryFilter === 'All' ? '' : currentCategoryFilter + ' '}reminders set.</p>`;
         return;
     }
 
     // Sort reminders: missed -> upcoming -> done
-    const sortedReminders = [...reminders].sort((a, b) => {
+    const sortedReminders = [...filteredReminders].sort((a, b) => {
         if (a.missed && !b.missed) return -1;
         if (!a.missed && b.missed) return 1;
         if (!a.done && b.done) return -1;
@@ -262,13 +491,17 @@ function displayReminders() {
         return 0; // same status, maintain order
     });
 
-    sortedReminders.forEach((note, index) => {
+    sortedReminders.forEach((note) => {
         const reminderElement = document.createElement("div");
         reminderElement.className = `reminder compact ${note.missed ? 'missed' : ''} ${note.done ? 'done' : ''}`;
         reminderElement.innerHTML = `
             <div class="note-summary" data-id="${note.id}">
-                <div class="title-line">${note.title} ${note.missed ? '<span class="status missed">MISSED</span>' : note.done ? '<span class="status done">DONE</span>' : ''}</div>
-                <p>${note.content}</p>
+                <div class="title-line">
+                    ${note.title}
+                    ${note.category ? `<span class="category-badge category-${note.category.toLowerCase()}">${note.category}</span>` : ''}
+                    ${note.missed ? '<span class="status missed">MISSED</span>' : note.done ? '<span class="status done">DONE</span>' : ''}
+                </div>
+                <p>${note.content.length > 100 ? note.content.substring(0, 100) + '...' : note.content}</p>
             </div>
         `;
         remindersContainer.appendChild(reminderElement);
@@ -290,12 +523,19 @@ function editNote(index, type) {
     const modalBody = document.getElementById('modal-body');
 
     const hasReminder = !!note.reminder;
+    const categories = ['General', 'School', 'Personal', 'Work', 'Other'];
+    const categoryOptions = categories.map(cat => 
+        `<option value="${cat}" ${note.category === cat ? 'selected' : ''}>${cat}</option>`
+    ).join('');
 
     modalBody.innerHTML = `
         <h2>Edit ${type === 'note' ? 'Note' : 'Reminder'}</h2>
         <div class="edit-input-section">
             <input type="text" id="edit-title" value="${note.title}" placeholder="Edit Note Title">
             <textarea id="edit-content" placeholder="Edit your note here...">${note.content}</textarea>
+            <select id="edit-category">
+                ${categoryOptions}
+            </select>
             <input type="datetime-local" id="edit-datetime" value="${note.reminder ? new Date(note.reminder).toISOString().slice(0, 16) : ''}" style="display: ${hasReminder ? 'block' : 'none'}">
             <div class="edit-buttons">
                 <button id="toggle-reminder">${hasReminder ? 'Remove Reminder' : 'Add Reminder'}</button>
@@ -340,6 +580,7 @@ function editNote(index, type) {
         if (confirm('Are you sure you want to reset all changes?')) {
             document.getElementById('edit-title').value = note.title;
             document.getElementById('edit-content').value = note.content;
+            document.getElementById('edit-category').value = note.category || 'General';
             const datetimeInput = document.getElementById('edit-datetime');
             datetimeInput.value = note.reminder ? new Date(note.reminder).toISOString().slice(0, 16) : '';
             datetimeInput.style.display = hasReminder ? 'block' : 'none';
@@ -348,36 +589,29 @@ function editNote(index, type) {
         }
     });
 
-    // Add event listener to the save button
+    // Save button
     document.getElementById('save-edit').addEventListener('click', async () => {
         const newTitle = document.getElementById('edit-title').value;
         const newContent = document.getElementById('edit-content').value;
+        const newCategory = document.getElementById('edit-category').value;
         const newDatetime = currentHasReminder ? document.getElementById('edit-datetime').value : null;
 
-        note.title = newTitle;
-        note.content = newContent;
-        note.reminder = newDatetime;
+        const updates = {
+            title: newTitle,
+            content: newContent,
+            category: newCategory,
+            reminder: newDatetime,
+            lastEditTime: new Date().toLocaleString()
+        };
+        
         if (newDatetime) {
-            note.alertedDay = false;
-            note.alertedTime = false;
-            note.missed = false;
+            updates.alertedDay = false;
+            updates.alertedTime = false;
+            updates.missed = false;
         }
-        note.lastEditTime = new Date().toLocaleString();
 
         try {
-            const updates = {
-                title: newTitle,
-                content: newContent,
-                reminder: newDatetime,
-                lastEditTime: note.lastEditTime
-            };
-            if (newDatetime) {
-                updates.alertedDay = false;
-                updates.alertedTime = false;
-                updates.missed = false;
-            }
-
-            // Update on server and local arrays (this will move between arrays if reminder changed)
+            // Update on server and local arrays
             await updateOnServerAndLocal(note.id, updates);
 
             // Refresh both displays since item might have moved
@@ -390,7 +624,7 @@ function editNote(index, type) {
         modal.style.display = 'none';
     });
 
-    // Add event listener to the cancel button
+    // Cancel button
     document.getElementById('cancel-edit').addEventListener('click', () => {
         modal.style.display = 'none';
     });
@@ -415,6 +649,7 @@ function showNoteDetails(index, type) {
 
     modalBody.innerHTML = `
         <h2>${note.title}</h2>
+        ${note.category ? `<p><strong>Category:</strong> ${note.category}</p>` : ''}
         <p>${note.content}</p>
         <small>Created at: ${note.timestamp}</small>
         <br><small>Last edited: ${note.lastEditTime}</small>
@@ -435,24 +670,26 @@ function showNoteDetails(index, type) {
         if (event.target === modal) modal.style.display = 'none';
     };
 
-    // Add event listeners to buttons
+    // Edit button
     document.getElementById('edit-detail').addEventListener('click', () => {
         editNote(index, type);
-        // Don't close modal, editNote will update the content
     });
 
+    // Delete button
     document.getElementById('delete-detail').addEventListener('click', async () => {
-        // Delete from server and local arrays
-        await deleteFromServerAndLocal(note.id);
-
-        if (type === 'note') {
-            displayNotes();
-        } else {
-            displayReminders();
+        if (confirm('Are you sure you want to delete this note?')) {
+            await deleteFromServerAndLocal(note.id);
+            
+            if (type === 'note') {
+                displayNotes();
+            } else {
+                displayReminders();
+            }
+            modal.style.display = 'none';
         }
-        modal.style.display = 'none';
     });
 
+    // Toggle done button for reminders
     if (type === 'reminder') {
         document.getElementById('toggle-done-detail').addEventListener('click', async () => {
             note.done = !note.done;
@@ -475,14 +712,14 @@ function showNoteDetails(index, type) {
 
 function checkReminders() {
     const now = new Date();
-    const today = now.toDateString(); // e.g., "Fri Dec 20 2025"
+    const today = now.toDateString();
 
     reminders.forEach(async (reminder) => {
         if (!reminder.reminder || reminder.done) return;
 
         try {
             const reminderDate = new Date(reminder.reminder);
-            if (isNaN(reminderDate.getTime())) return; // Invalid date
+            if (isNaN(reminderDate.getTime())) return;
 
             const reminderDay = reminderDate.toDateString();
             const reminderTime = reminderDate.getTime();
@@ -492,7 +729,7 @@ function checkReminders() {
 
             // Check if it's the day of the reminder
             if (!reminder.alertedDay && reminderDay === today) {
-                alert(`Reminder for today: ${reminder.title}`);
+                showNotification(`Reminder for today: ${reminder.title}`, reminder.content);
                 reminder.alertedDay = true;
                 updates.alertedDay = true;
                 needsUpdate = true;
@@ -500,19 +737,19 @@ function checkReminders() {
 
             // Check if it's the specific time (within 1 minute)
             if (!reminder.alertedTime && Math.abs(now.getTime() - reminderTime) < 60000) {
-                alert(`Reminder time: ${reminder.title}`);
+                showNotification(`Reminder time: ${reminder.title}`, reminder.content);
                 reminder.alertedTime = true;
                 updates.alertedTime = true;
                 needsUpdate = true;
             }
 
             // Check if missed
-            if (!reminder.missed && now.getTime() > reminderTime + 60000) { // Past by more than 1 minute
+            if (!reminder.missed && now.getTime() > reminderTime + 60000) {
                 reminder.missed = true;
-                alert(`Missed reminder: ${reminder.title}`);
+                showNotification(`Missed reminder: ${reminder.title}`, reminder.content);
                 updates.missed = true;
                 needsUpdate = true;
-                displayReminders(); // Update display
+                displayReminders();
             }
 
             // Update server if needed
@@ -524,3 +761,36 @@ function checkReminders() {
         }
     });
 }
+
+// Notification functions
+function requestNotificationPermission() {
+    if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission().then(permission => {
+            if (permission === "granted") {
+                console.log("Notification permission granted");
+            }
+        });
+    }
+}
+
+function showNotification(title, body) {
+    // Show browser notification if available
+    if ("Notification" in window && Notification.permission === "granted") {
+        new Notification(title, {
+            body: body,
+            icon: '/icon.png'
+        });
+    }
+    
+    // Also show alert as fallback
+    alert(`${title}\n${body}`);
+}
+
+// Make functions available globally
+window.addNote = addNote;
+window.editNote = editNote;
+window.showNoteDetails = showNoteDetails;
+window.checkReminders = checkReminders;
+window.resetNoteForm = resetNoteForm;
+window.displayNotes = displayNotes;
+window.displayReminders = displayReminders;
