@@ -11,19 +11,58 @@ async function loadData() {
     try {
         const response = await fetch(`${API_BASE}/api/notes`);
         const data = await response.json();
-        notes = data.notes || [];
-        reminders = data.reminders || [];
+
+        const serverNotes = data.notes || [];
+        const serverReminders = data.reminders || [];
+
+        const serverIsEmpty =
+            serverNotes.length === 0 && serverReminders.length === 0;
+
+        if (serverIsEmpty) {
+            console.log('Server data empty, loading from localStorage');
+
+            const localNotes = JSON.parse(localStorage.getItem('notes')) || [];
+            const localReminders = JSON.parse(localStorage.getItem('reminders')) || [];
+
+            notes = localNotes;
+            reminders = localReminders;
+
+            // Sync local data back to server
+            await syncLocalToServer(localNotes, localReminders);
+        } else {
+            // Use server data
+            notes = serverNotes;
+            reminders = serverReminders;
+
+            // Optional: sync server → local
+            localStorage.setItem('notes', JSON.stringify(notes));
+            localStorage.setItem('reminders', JSON.stringify(reminders));
+        }
+
         displayNotes();
         displayReminders();
         initializeCategoryFilters();
         checkReminders();
+
     } catch (error) {
-        console.error('Error loading data from server:', error);
+        console.error('Server unavailable, using localStorage:', error);
         loadFromLocalStorage();
     }
-    
-    // Add category input if missing
+
     addCategoryInput();
+}
+
+// Sync localStorage to Server
+async function syncLocalToServer(localNotes, localReminders) {
+    // Save notes
+    await localNotes.forEach(note => {
+        saveToServerAndUpdateLocal(note);
+    });
+
+    // Save reminders
+    await localReminders.forEach(reminder => {
+        saveToServerAndUpdateLocal(reminder);
+    });
 }
 
 // Fallback function to load from localStorage

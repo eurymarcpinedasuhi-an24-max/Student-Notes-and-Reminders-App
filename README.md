@@ -6,7 +6,7 @@ A web application for managing notes and reminders with JSON file backend for da
 
 - Create and manage notes with titles and content
 - Set reminders with date and time
-- Persistent storage using JSON file
+- Storage using JSON file
 - Automatic reminder alerts
 - Mark reminders as done
 - Reschedule reminders
@@ -83,6 +83,6 @@ npm run dev
 ## Technologies Used
 
 - Frontend: HTML, CSS, JavaScript
-- Backend: Node.js, Express.js
-- Database: MongoDB with Mongoose ODM
+- Backend: Node.js, Express.js, Render
+- Storage: JSON
 - Additional: CORS, Body-parser
