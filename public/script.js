@@ -4,7 +4,7 @@ let currentCategoryFilter = 'All';
 let formHandler = null;
 let eventListenersAttached = false;
 
-const API_BASE = 'http://localhost:3000';
+const API_BASE = '';
 
 // Load data from server on page load
 async function loadData() {
