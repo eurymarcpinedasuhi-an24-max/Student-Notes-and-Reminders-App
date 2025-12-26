@@ -6,6 +6,63 @@ let eventListenersAttached = false;
 
 const API_BASE = '';
 
+/**
+ * App Initializations and starts
+ */
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM Content Loaded - Initializing app');
+    
+    // Initialize form handler if available
+    if (typeof window.FormHandler !== 'undefined') {
+        formHandler = new window.FormHandler();
+    }
+    
+    // Load data and setup
+    loadData();
+    
+    // Setup event listeners
+    setupEventListeners();
+    
+    // Check reminders every minute
+    setInterval(checkReminders, 60000);
+    
+    // Request notification permission
+    requestNotificationPermission();
+});
+
+// Setup event listeners (only once)
+function setupEventListeners() {
+    if (eventListenersAttached) return;
+    
+    console.log('Setting up event listeners');
+    
+    // Add note button
+    const addButton = document.getElementById("add-note-button");
+    if (addButton) {
+        // Remove any existing listeners by cloning
+        const newAddButton = addButton.cloneNode(true);
+        addButton.parentNode.replaceChild(newAddButton, addButton);
+        
+        newAddButton.addEventListener("click", handleAddNote);
+    }
+    
+    // Reset button
+    const resetButton = document.getElementById("reset-button");
+    if (resetButton) {
+        const newResetButton = resetButton.cloneNode(true);
+        resetButton.parentNode.replaceChild(newResetButton, resetButton);
+        
+        newResetButton.addEventListener("click", handleResetForm);
+    }
+    
+    eventListenersAttached = true;
+}
+
+
+
+/**
+ * Handles fetching of data at start either at server or at local Storage
+ */
 // Load data from server on page load
 async function loadData() {
     try {
@@ -15,8 +72,7 @@ async function loadData() {
         const serverNotes = data.notes || [];
         const serverReminders = data.reminders || [];
 
-        const serverIsEmpty =
-            serverNotes.length === 0 && serverReminders.length === 0;
+        const serverIsEmpty = serverNotes.length === 0 && serverReminders.length === 0;
 
         if (serverIsEmpty) {
             console.log('Server data empty, loading from localStorage');
@@ -30,6 +86,8 @@ async function loadData() {
             // Sync local data back to server
             await syncLocalToServer(localNotes, localReminders);
         } else {
+            console.log('Syncing server data to Local Storage');
+            
             // Use server data
             notes = serverNotes;
             reminders = serverReminders;
@@ -52,7 +110,7 @@ async function loadData() {
     addCategoryInput();
 }
 
-// Sync localStorage to Server
+// Sync localStorage to Server if the sever gives empty data
 async function syncLocalToServer(localNotes, localReminders) {
     // Save notes
     await localNotes.forEach(note => {
@@ -82,6 +140,11 @@ function loadFromLocalStorage() {
     initializeCategoryFilters();
 }
 
+
+
+/**
+ * Actions on both Server, Local Arrays, and Local Storage
+ */
 // Save data to server and update local arrays
 async function saveToServerAndUpdateLocal(note) {
     try {
@@ -180,7 +243,11 @@ function updateLocalArrays(updatedNote) {
     }
 }
 
-// Fallback localStorage functions
+
+
+/**
+ * Actions in LocalStorage
+ */
 function saveToLocalStorage() {
     localStorage.setItem('notes', JSON.stringify(notes));
     localStorage.setItem('reminders', JSON.stringify(reminders));
@@ -196,6 +263,11 @@ function deleteFromLocalStorage(id) {
     saveToLocalStorage();
 }
 
+
+
+/**
+ * Handles Form actions
+ */
 // Get next ID from server
 async function getNextId() {
     try {
@@ -209,56 +281,6 @@ async function getNextId() {
         localStorage.setItem('idCounter', idCounter.toString());
         return idCounter;
     }
-}
-
-// Initialize app
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM Content Loaded - Initializing app');
-    
-    // Initialize form handler if available
-    if (typeof window.FormHandler !== 'undefined') {
-        formHandler = new window.FormHandler();
-    }
-    
-    // Load data and setup
-    loadData();
-    
-    // Setup event listeners
-    setupEventListeners();
-    
-    // Check reminders every minute
-    setInterval(checkReminders, 60000);
-    
-    // Request notification permission
-    requestNotificationPermission();
-});
-
-// Setup event listeners (only once)
-function setupEventListeners() {
-    if (eventListenersAttached) return;
-    
-    console.log('Setting up event listeners');
-    
-    // Add note button
-    const addButton = document.getElementById("add-note-button");
-    if (addButton) {
-        // Remove any existing listeners by cloning
-        const newAddButton = addButton.cloneNode(true);
-        addButton.parentNode.replaceChild(newAddButton, addButton);
-        
-        newAddButton.addEventListener("click", handleAddNote);
-    }
-    
-    // Reset button
-    const resetButton = document.getElementById("reset-button");
-    if (resetButton) {
-        const newResetButton = resetButton.cloneNode(true);
-        resetButton.parentNode.replaceChild(newResetButton, resetButton);
-        
-        newResetButton.addEventListener("click", handleResetForm);
-    }
-    
-    eventListenersAttached = true;
 }
 
 // Handle add note
@@ -316,58 +338,6 @@ function addCategoryInput() {
         eventListenersAttached = false;
         setupEventListeners();
     }
-}
-
-// Initialize category filter buttons
-function initializeCategoryFilters() {
-    const categories = ['All', 'General', 'School', 'Personal', 'Work', 'Other'];
-    const notesContainer = document.getElementById('notes-display');
-    const remindersContainer = document.getElementById('reminders');
-    
-    // Remove existing filter buttons
-    document.querySelectorAll('.filter-buttons').forEach(el => el.remove());
-    
-    // Add filter buttons to notes section
-    const notesFilterDiv = document.createElement('div');
-    notesFilterDiv.className = 'filter-buttons';
-    notesFilterDiv.innerHTML = categories.map(cat => 
-        `<button class="category-filter ${cat === 'All' ? 'active' : ''}" data-category="${cat}">${cat}</button>`
-    ).join('');
-    
-    // Add filter buttons to reminders section
-    const remindersFilterDiv = document.createElement('div');
-    remindersFilterDiv.className = 'filter-buttons';
-    remindersFilterDiv.innerHTML = categories.map(cat => 
-        `<button class="category-filter ${cat === 'All' ? 'active' : ''}" data-category="${cat}">${cat}</button>`
-    ).join('');
-    
-    // Insert before containers
-    const notesTitle = notesContainer.querySelector('h2');
-    const remindersTitle = remindersContainer.querySelector('h2');
-    
-    if (notesTitle && notesContainer.querySelector('#notes-container')) {
-        notesTitle.insertAdjacentElement('afterend', notesFilterDiv);
-    }
-    
-    if (remindersTitle && remindersContainer.querySelector('#reminders-container')) {
-        remindersTitle.insertAdjacentElement('afterend', remindersFilterDiv);
-    }
-    
-    // Add event listeners to all filter buttons
-    document.querySelectorAll('.category-filter').forEach(button => {
-        button.addEventListener('click', () => {
-            // Update active state
-            document.querySelectorAll('.category-filter').forEach(btn => 
-                btn.classList.remove('active')
-            );
-            button.classList.add('active');
-            
-            // Update filter
-            currentCategoryFilter = button.getAttribute('data-category');
-            displayNotes();
-            displayReminders();
-        });
-    });
 }
 
 // Main function to add a note
@@ -461,6 +431,63 @@ function resetNoteForm() {
     if (categorySelect) {
         categorySelect.value = "General";
     }
+}
+
+
+
+/**
+ * Handles Note/Reminder Actions
+ */
+// Initialize category filter buttons
+function initializeCategoryFilters() {
+    const categories = ['All', 'General', 'School', 'Personal', 'Work', 'Other'];
+    const notesContainer = document.getElementById('notes-display');
+    const remindersContainer = document.getElementById('reminders');
+    
+    // Remove existing filter buttons
+    document.querySelectorAll('.filter-buttons').forEach(el => el.remove());
+    
+    // Add filter buttons to notes section
+    const notesFilterDiv = document.createElement('div');
+    notesFilterDiv.className = 'filter-buttons';
+    notesFilterDiv.innerHTML = categories.map(cat => 
+        `<button class="category-filter ${cat === 'All' ? 'active' : ''}" data-category="${cat}">${cat}</button>`
+    ).join('');
+    
+    // Add filter buttons to reminders section
+    const remindersFilterDiv = document.createElement('div');
+    remindersFilterDiv.className = 'filter-buttons';
+    remindersFilterDiv.innerHTML = categories.map(cat => 
+        `<button class="category-filter ${cat === 'All' ? 'active' : ''}" data-category="${cat}">${cat}</button>`
+    ).join('');
+    
+    // Insert before containers
+    const notesTitle = notesContainer.querySelector('h2');
+    const remindersTitle = remindersContainer.querySelector('h2');
+    
+    if (notesTitle && notesContainer.querySelector('#notes-container')) {
+        notesTitle.insertAdjacentElement('afterend', notesFilterDiv);
+    }
+    
+    if (remindersTitle && remindersContainer.querySelector('#reminders-container')) {
+        remindersTitle.insertAdjacentElement('afterend', remindersFilterDiv);
+    }
+    
+    // Add event listeners to all filter buttons
+    document.querySelectorAll('.category-filter').forEach(button => {
+        button.addEventListener('click', () => {
+            // Update active state
+            document.querySelectorAll('.category-filter').forEach(btn => 
+                btn.classList.remove('active')
+            );
+            button.classList.add('active');
+            
+            // Update filter
+            currentCategoryFilter = button.getAttribute('data-category');
+            displayNotes();
+            displayReminders();
+        });
+    });
 }
 
 function displayNotes() {
@@ -801,7 +828,13 @@ function checkReminders() {
     });
 }
 
-// Notification functions
+
+
+
+
+/**
+ * Notification functions
+ */
 function requestNotificationPermission() {
     if ("Notification" in window && Notification.permission === "default") {
         Notification.requestPermission().then(permission => {
@@ -824,6 +857,9 @@ function showNotification(title, body) {
     // Also show alert as fallback
     alert(`${title}\n${body}`);
 }
+
+
+
 
 // Make functions available globally
 window.addNote = addNote;

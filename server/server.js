@@ -83,6 +83,13 @@ app.post('/api/notes', async (req, res) => {
         const data = await readData();
         let note = req.body;
 
+        if (note.title) {
+            note.title = sanitizeText(note.title);
+        }
+        if (note.content) {
+            note.content = sanitizeText(note.content);
+        }
+
         if (note.reminder) {
             data.reminders = data.reminders || [];
             data.reminders.push(note);
@@ -104,6 +111,13 @@ app.put('/api/notes/:id', async (req, res) => {
         const data = await readData();
         const id = parseInt(req.params.id);
         let updates = req.body;
+
+        if (updates.title) {
+            updates.title = sanitizeText(updates.title);
+        }
+        if (updates.content) {
+            updates.content = sanitizeText(updates.content);
+        }
 
         // Find the existing note
         let existingNote = null;
@@ -230,3 +244,14 @@ app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`Data will be stored in: ${DATA_FILE}`);
 });
+
+function sanitizeText(input) {
+    if (typeof input !== 'string') return input;
+
+    return input
+        .replace(/&/g, '&amp;')   // must be first
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
